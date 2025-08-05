@@ -41,7 +41,7 @@ This project provides a comprehensive risk analysis of a financial portfolio usi
         ```bash
         python portfolio_creator.py
         ```
-    -   You may choose to use edit the `read_from` parameter to `sp500_tickers.csv` to generate a portfolio with weights for all S&P500 stocks, though running the Monte Carlo simulation on this larger dataset may take a while. Ensure if so, that you update `portfolio_file` in `risk_models.py`.
+    -   You may choose to edit the `read_from` parameter to `sp500_tickers.csv` to generate a portfolio with weights for all S&P500 stocks, though running the Monte Carlo simulation on this larger dataset may take a while. Ensure if so, that you update `portfolio_file` in `risk_models.py` to `sp500_tickers_with_weights.csv`.
     -   Alternatively, you can manually create your `portfolio.csv` file. It must contain two columns: `tickers` and `weights`. If so, update `portfolio_file` in `risk_models.py` as above.
 
 2.  **Run the Risk Analysis**:
