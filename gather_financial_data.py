@@ -36,47 +36,34 @@ def fetch_adj_close_prices(tickers: str | list, start_date: str = None, end_date
     else:
         period_params = {'period': 'max'}
 
-    adj_close_df = pd.DataFrame()
-
     try:
-        if isinstance(tickers, str): # Handle single ticker using yf.Ticker().history()
-            ticker_obj = yf.Ticker(tickers)
-            data = ticker_obj.history(**period_params)
-            time.sleep(sleep_time)
+        data = yf.download(tickers, **period_params, auto_adjust=True, progress=False)
+        time.sleep(sleep_time)
 
-            if data.empty:
-                print(f"Warning: No data downloaded for {tickers} for the specified range.")
-                return pd.DataFrame()
-
-            # Ensure 'Close' column exists (if not then check for adjusted)
-            if 'Close' in data.columns:
-                adj_close_df = data['Close'].to_frame(name=tickers) # Convert Series to DataFrame, name column
-            elif 'Adj Close' in data.columns: 
-                 adj_close_df = data['Adj Close'].to_frame(name=tickers)
-            else:
-                print(f"Error: Neither 'Close' nor 'Adj Close' column found for {tickers}.")
-                return pd.DataFrame()
-
-        elif isinstance(tickers, list): # Handle multiple tickers using yf.download()
-            data = yf.download(tickers, **period_params, auto_adjust=True, progress=False)
-            time.sleep(sleep_time)
-            if data.empty:
-                print(f"Warning: No data downloaded for {tickers} for the specified range.")
-                return pd.DataFrame()
-
-            # Ensure 'Close' column exists (if not then check for adjusted)
-            if 'Close' in data.columns:
-                adj_close_df = data['Close'] # Returns a df in this case (no need to convert)
-            elif 'Adj Close' in data.columns: 
-                adj_close_df = data['Adj Close']
-            else:
-                print(f"Error: Neither 'Close' nor 'Adj Close' column found in downloaded data for {tickers}.")
-                return pd.DataFrame()
-        else:
-            print(f"Error: 'tickers' must be a string or a list of strings. Received type {type(tickers)}")
+        if data.empty:
+            print(f"Warning: No data downloaded for {tickers} for the specified range.")
             return pd.DataFrame()
 
-        # Ensure index is datetime for consistency and sort by date
+        if 'Close' not in data.columns:
+            print(f"Error: Could not extract 'Close' price data for {tickers}.")
+            return pd.DataFrame()
+
+        close_prices = data['Close']
+
+        # Ensure the output is always a DataFrame 
+        if isinstance(close_prices, pd.Series):
+            adj_close_df = close_prices.to_frame(name=close_prices.name)
+        else:
+
+            adj_close_df = close_prices.copy()
+
+        # Drop columns that are all NaN (can happen if a ticker is valid but has no data in range)
+        adj_close_df.dropna(axis=1, how='all', inplace=True)
+
+        if adj_close_df.empty:
+            print(f"Warning: All tickers in {tickers} resulted in empty data for the specified range.")
+            return pd.DataFrame()
+
         adj_close_df.index = pd.to_datetime(adj_close_df.index)
         return adj_close_df.sort_index()
 
@@ -84,10 +71,10 @@ def fetch_adj_close_prices(tickers: str | list, start_date: str = None, end_date
         print(f"Error fetching data for {tickers}: {e}")
         return pd.DataFrame()
 
-def fetch_currency_data(currency_pair_ticker: str, start_date: str = None, end_date: str = None, max_range: bool = False, sleep_time: float = DEFAULT_SLEEP) -> pd.DataFrame:
+def fetch_currency_data(currency_pair_tickers: str | list, start_date: str = None, end_date: str = None, max_range: bool = False, sleep_time: float = DEFAULT_SLEEP) -> pd.DataFrame:
     """
     Fetches historical exchange rate data for a specified currency pair from Yahoo Finance.
-    Specifically inverts GBP=X to represent GBP per 1 USD.
+    Note: Tickers should be in the format 'FROMCURTO_CUR=X', e.g., 'USDGBP=X' for GBP per 1 USD.
 
     Args:
         currency_pair_ticker (str): The ticker symbol for the currency pair (e.g., 'GBP=X' for GBP/USD).
@@ -115,40 +102,45 @@ def fetch_currency_data(currency_pair_ticker: str, start_date: str = None, end_d
         download_params = {'period': 'max'}
 
     try:
-        data = yf.download(currency_pair_ticker, **download_params, auto_adjust=False, progress=False)
+        data = yf.download(currency_pair_tickers, **download_params, auto_adjust=True, progress=False)
         time.sleep(sleep_time)
 
         if data.empty:
-            print(f"Warning: No data downloaded for {currency_pair_ticker} for the specified range.")
+            print(f"Warning: No data downloaded for {currency_pair_tickers} for the specified range.")
             return pd.DataFrame()
 
-        # Squeeze then frame for a clean result
-        if 'Adj Close' in data.columns:
-            rate_series = data['Adj Close'].squeeze()
-        elif 'Close' in data.columns:
-            print(f"Warning: 'Adj Close' not found for {currency_pair_ticker}, using 'Close'.")
-            rate_series = data['Close'].squeeze()
+        
+        if 'Close' not in data.columns:
+            print(f"Error: Could not extract 'Close' price data for {currency_pair_tickers}.")
+            return pd.DataFrame()
+
+        close_prices = data['Close']
+
+        # Ensure the output is always a DataFrame
+        if isinstance(close_prices, pd.Series):
+            ticker_name = currency_pair_tickers if isinstance(currency_pair_tickers, str) else currency_pair_tickers[0]
+            currency_rate_df = close_prices.to_frame(name=ticker_name.replace('=X', ''))
         else:
-            print(f"Error: Neither 'Adj Close' nor 'Close' column found for {currency_pair_ticker}.")
+            currency_rate_df = close_prices.copy()
+            currency_rate_df.columns = [col.replace('=X', '') for col in currency_rate_df.columns]
+
+        # Drop columns that are all NaN
+        # TODO: Flag individual tickers that have no data
+        currency_rate_df.dropna(axis=1, how='all', inplace=True)
+
+        if currency_rate_df.empty:
+            print(f"Warning: All tickers in {currency_pair_tickers} resulted in empty data.")
             return pd.DataFrame()
 
-        if rate_series.empty:
-            print(f"Error: Extracted price series for {currency_pair_ticker} is empty.")
-            return pd.DataFrame()
-
-        # Convert Series to DataFrame and rename the column (without '=X')
-        column_name = currency_pair_ticker.replace('=X', '')
-        currency_rate_df = rate_series.to_frame(name=column_name)
-
-        # Ensure index is datetime for consistency and sort by date
         currency_rate_df.index = pd.to_datetime(currency_rate_df.index)
         return currency_rate_df.sort_index()
 
     except Exception as e:
-        print(f"An error occurred while fetching data for {currency_pair_ticker}: {e}")
+        print(f"An error occurred while fetching data for {currency_pair_tickers}: {e}")
         return pd.DataFrame()
 
 def fetch_option_chain(ticker: str, exp_date: str = None, sleep_time_sec: float = 0.5) -> pd.DataFrame:
+    # TODO: Handle multiple tickers here
     """
     Fetches the full option chain for a given stock ticker.
     If no expiration date is provided, it fetches the chain for the nearest
@@ -220,6 +212,7 @@ def fetch_option_chain(ticker: str, exp_date: str = None, sleep_time_sec: float 
         return pd.DataFrame()
 
 def calculate_atm_iv(ticker: str, risk_free_rate: float) -> float | None:
+    # TODO: Handle multiple tickers here
     """
     Calculates IV for the ATM option on the furthest date, using a call or put.
 
@@ -317,7 +310,8 @@ def calculate_atm_iv(ticker: str, risk_free_rate: float) -> float | None:
         return None
 
 if __name__ == "__main__":
-    current_risk_free_rate = 0.0434 # Current 3 Month T-Bill Rate
+    # TODO: Dynamic risk-free rate fetching for specific countries
+    current_risk_free_rate = 0.04101 # Current 3 year Gilt yield
 
     # Example 1: Single stock with a specific range
     aapl_prices = fetch_adj_close_prices('AAPL', '2020-01-01', '2023-12-31')
@@ -346,7 +340,7 @@ if __name__ == "__main__":
         print("\nAttempted to fetch data for an invalid ticker. Returned empty DataFrame as expected.")
 
     # Example 4: Max available history for AAPL
-    max_aapl_prices = fetch_adj_close_prices('AAPL', max_range=True, sleep_time_sec=2)
+    max_aapl_prices = fetch_adj_close_prices('AAPL', max_range=True, sleep_time=2)
     if not max_aapl_prices.empty:
         print("\nAAPL Adjusted Close Prices (Max Range, Head):")
         print(max_aapl_prices.head())
@@ -374,7 +368,7 @@ if __name__ == "__main__":
         print("Example 1: GBP/USD data not fetched.")
 
     # Example 7: Fetching max available history for GBP=X
-    max_gbp_usd_rate = fetch_currency_data('GBP=X', max_range=True, sleep_time_sec=2)
+    max_gbp_usd_rate = fetch_currency_data('GBP=X', max_range=True, sleep_time=2)
     if not max_gbp_usd_rate.empty:
         print("\nGBP per USD Rate (Max Range, Head):")
         print(max_gbp_usd_rate.head())

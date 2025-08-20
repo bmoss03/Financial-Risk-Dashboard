@@ -1,22 +1,25 @@
 # Financial Portfolio Risk Analysis Dashboard
 
-This project provides a comprehensive risk analysis of a financial portfolio using three industry-standard methodologies: Historical Simulation, eGARCH modeling, and a multi-asset Monte Carlo simulation. It is designed to analyze a portfolio of US equities from the perspective of a UK-based (GBP) investor, incorporating currency risk into the calculations.
+This project provides a comprehensive risk analysis of a financial portfolio by connecting directly to an Interactive Brokers Trading Workstation or Gateway (or alternatively the default backup_portfolio.csv for demonstration). It uses three industry-standard methodologies: Historical Simulation, GARCH modeling, and a multi-asset Monte Carlo simulation. The analysis is performed from the perspective of a local investor using a base currency (default GBP), correctly incorporating currency risk for all foreign assets and cash balances.
 
 ## Features
 
--   **Three Risk Models**:
+-   **Live Portfolio Integration**: Connects to a running IBKR TWS or Gateway instance to fetch real-time portfolio positions, including equities, bonds, and multi-currency cash balances.
+-   **Backup / Test System**: If the IBKR connection fails, the application automatically falls back to the last successfully fetched portfolio stored in `backup_portfolio.csv`.
+-   **Three Core Risk Models**:
     -   **Historical Simulation**: Calculates risk based on the actual historical distribution of returns.
     -   **GARCH**: Models time-varying volatility using a GARCH(1,1) model driven by a Student's t-distribution.
     -   **Monte Carlo Simulation**: Simulates a specified number of future portfolio outcomes based on individual asset implied volatilities calculated from option prices and their historical correlations, using a geometric Brownian motion model.
 -   **Core Risk Metrics**:
     -   **Value at Risk (VaR)**: Estimates the maximum potential loss over a given time horizon at a specific confidence level.
     -   **Conditional Value at Risk (CVaR)**: Also known as Expected Shortfall, it measures the expected loss if the VaR threshold is breached.
--   **Multi-Currency Analysis**: Automatically incorporates GBP/USD exchange rate movements into the risk calculation for a UK-based portfolio.
+-   **Multi-Currency Analysis**: Automatically incorporates exchange rate movements into the risk calculation for a base and pair currencies, for GBP, USD, EUR, CAD, CHF, JPY, AUD, HKD and SGD.
 -   **Modular and Customizable**: The project is split into logical modules for data gathering, portfolio generation, and risk modeling, making it easy to extend and adapt.
 
 ## Requirements
 
 -   Python 3.10+
+-   Recommended: An Interactive Brokers account with TWS or Gateway running.
 -   Required packages are listed in `requirements.txt`.
 
 ## Installation
@@ -36,20 +39,19 @@ This project provides a comprehensive risk analysis of a financial portfolio usi
 
 ## Usage
 
-1.  **Create Your Portfolio**:
-    -   Run the `portfolio_creator.py` script to generate a `sp500_tickers_with_weights_test.csv` file with randomly assigned weights for the 20 stocks in the `sp500_tickers_test.csv` file.
-        ```bash
-        python portfolio_creator.py
-        ```
-    -   You may choose to use edit the `read_from` parameter to `sp500_tickers.csv` to generate a portfolio with weights for all S&P500 stocks, though running the Monte Carlo simulation on this larger dataset may take a while. Ensure if so, that you update `portfolio_file` in `risk_models.py`.
-    -   Alternatively, you can manually create your `portfolio.csv` file. It must contain two columns: `tickers` and `weights`. If so, update `portfolio_file` in `risk_models.py` as above.
+1.  **Optional: Start Interactive Brokers TWS or Gateway**:
+    -   Log in to your IBKR trading workstation or Gateway.
+    -   Ensure the API is enabled. In TWS, go to `File > Global Configuration > API > Settings` and check "Enable ActiveX and Socket Clients".
 
 2.  **Run the Risk Analysis**:
-    -   You can configure the parameters (portfolio file, date range, confidence level, etc.) at the top of the `risk_models.py` script.
+    -   You can configure key parameters (date range, confidence level, time horizon) in the `if __name__ == "__main__"` block of `risk_models.py`.
+    -   The base currency can be configured at the top of `risk_models.py`
+    -   The IBKR connection details can be configured in the `get_ib_portfolio` function in `ib_connect.py`.
     -   Execute the main script from your terminal:
         ```bash
         python risk_models.py
         ```
+    -   The script will connect to IBKR, fetch your portfolio, and then run the three risk models. If it cannot connect, it will use `backup_portfolio.csv`.
 
 ## Interpreting the Output
 The script will print the VaR and CVaR for the specified time horizon and confidence level for each of the three models.
